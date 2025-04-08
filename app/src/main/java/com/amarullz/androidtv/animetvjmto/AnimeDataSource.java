@@ -51,183 +51,49 @@ import java.util.zip.GZIPInputStream;
 
 import javax.net.ssl.HttpsURLConnection;
 
-@UnstableApi public class AnimeDataSource extends BaseDataSource implements HttpDataSource {
+@UnstableApi
+public class AnimeDataSource extends BaseDataSource implements HttpDataSource {
 
-    /** {@link DataSource.Factory} for {@link AnimeDataSource} instances. */
-    public static final class Factory implements HttpDataSource.Factory {
-
-        private final RequestProperties defaultRequestProperties;
-
-        @Nullable
-        private TransferListener transferListener;
-        @Nullable private Predicate<String> contentTypePredicate;
-        @Nullable private String userAgent;
-        private int connectTimeoutMs;
-        private int readTimeoutMs;
-        private boolean allowCrossProtocolRedirects;
-        private boolean keepPostFor302Redirects;
-
-        /** Creates an instance. */
-        public Factory() {
-            defaultRequestProperties = new RequestProperties();
-            connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MILLIS;
-            readTimeoutMs = DEFAULT_READ_TIMEOUT_MILLIS;
-        }
-
-        @UnstableApi
-        @Override
-        public final AnimeDataSource.Factory setDefaultRequestProperties(Map<String, String> defaultRequestProperties) {
-            this.defaultRequestProperties.clearAndSet(defaultRequestProperties);
-            return this;
-        }
-
-        /**
-         * Sets the user agent that will be used.
-         *
-         * <p>The default is {@code null}, which causes the default user agent of the underlying
-         * platform to be used.
-         *
-         * @param userAgent The user agent that will be used, or {@code null} to use the default user
-         *     agent of the underlying platform.
-         * @return This factory.
-         */
-        @UnstableApi
-        public AnimeDataSource.Factory setUserAgent(@Nullable String userAgent) {
-            this.userAgent = userAgent;
-            return this;
-        }
-
-        /**
-         * Sets the connect timeout, in milliseconds.
-         *
-         * <p>The default is {@link AnimeDataSource#DEFAULT_CONNECT_TIMEOUT_MILLIS}.
-         *
-         * @param connectTimeoutMs The connect timeout, in milliseconds, that will be used.
-         * @return This factory.
-         */
-        @UnstableApi
-        public AnimeDataSource.Factory setConnectTimeoutMs(int connectTimeoutMs) {
-            this.connectTimeoutMs = connectTimeoutMs;
-            return this;
-        }
-
-        /**
-         * Sets the read timeout, in milliseconds.
-         *
-         * <p>The default is {@link AnimeDataSource#DEFAULT_READ_TIMEOUT_MILLIS}.
-         *
-         * @param readTimeoutMs The connect timeout, in milliseconds, that will be used.
-         * @return This factory.
-         */
-        @UnstableApi
-        public AnimeDataSource.Factory setReadTimeoutMs(int readTimeoutMs) {
-            this.readTimeoutMs = readTimeoutMs;
-            return this;
-        }
-
-        /**
-         * Sets whether to allow cross protocol redirects.
-         *
-         * <p>The default is {@code false}.
-         *
-         * @param allowCrossProtocolRedirects Whether to allow cross protocol redirects.
-         * @return This factory.
-         */
-        @UnstableApi
-        public AnimeDataSource.Factory setAllowCrossProtocolRedirects(boolean allowCrossProtocolRedirects) {
-            this.allowCrossProtocolRedirects = allowCrossProtocolRedirects;
-            return this;
-        }
-
-        /**
-         * Sets a content type {@link Predicate}. If a content type is rejected by the predicate then a
-         * {@link HttpDataSource.InvalidContentTypeException} is thrown from {@link
-         * AnimeDataSource#open(DataSpec)}.
-         *
-         * <p>The default is {@code null}.
-         *
-         * @param contentTypePredicate The content type {@link Predicate}, or {@code null} to clear a
-         *     predicate that was previously set.
-         * @return This factory.
-         */
-        @UnstableApi
-        public AnimeDataSource.Factory setContentTypePredicate(@Nullable Predicate<String> contentTypePredicate) {
-            this.contentTypePredicate = contentTypePredicate;
-            return this;
-        }
-
-        /**
-         * Sets the {@link TransferListener} that will be used.
-         *
-         * <p>The default is {@code null}.
-         *
-         * <p>See {@link DataSource#addTransferListener(TransferListener)}.
-         *
-         * @param transferListener The listener that will be used.
-         * @return This factory.
-         */
-        @UnstableApi
-        public AnimeDataSource.Factory setTransferListener(@Nullable TransferListener transferListener) {
-            this.transferListener = transferListener;
-            return this;
-        }
-
-        /**
-         * Sets whether we should keep the POST method and body when we have HTTP 302 redirects for a
-         * POST request.
-         */
-        @UnstableApi
-        public AnimeDataSource.Factory setKeepPostFor302Redirects(boolean keepPostFor302Redirects) {
-            this.keepPostFor302Redirects = keepPostFor302Redirects;
-            return this;
-        }
-
-        @UnstableApi
-        @Override
-        public AnimeDataSource createDataSource() {
-            AnimeDataSource dataSource =
-                    new AnimeDataSource(
-                            userAgent,
-                            connectTimeoutMs,
-                            readTimeoutMs,
-                            allowCrossProtocolRedirects,
-                            defaultRequestProperties,
-                            contentTypePredicate,
-                            keepPostFor302Redirects);
-            if (transferListener != null) {
-                dataSource.addTransferListener(transferListener);
-            }
-            return dataSource;
-        }
-    }
-
-    /** The default connection timeout, in milliseconds. */
-    @UnstableApi public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 8 * 1000;
-    /** The default read timeout, in milliseconds. */
-    @UnstableApi public static final int DEFAULT_READ_TIMEOUT_MILLIS = 8 * 1000;
-
+    /**
+     * The default connection timeout, in milliseconds.
+     */
+    @UnstableApi
+    public static final int DEFAULT_CONNECT_TIMEOUT_MILLIS = 8 * 1000;
+    /**
+     * The default read timeout, in milliseconds.
+     */
+    @UnstableApi
+    public static final int DEFAULT_READ_TIMEOUT_MILLIS = 8 * 1000;
     private static final String TAG = "AnimeDataSource";
     private static final int MAX_REDIRECTS = 20; // Same limit as okhttp.
     private static final int HTTP_STATUS_TEMPORARY_REDIRECT = 307;
     private static final int HTTP_STATUS_PERMANENT_REDIRECT = 308;
     private static final long MAX_BYTES_TO_DRAIN = 2048;
-
+    public static String sd5query = "";
     private final boolean allowCrossProtocolRedirects;
     private final int connectTimeoutMillis;
     private final int readTimeoutMillis;
-    @Nullable private final String userAgent;
-    @Nullable private final RequestProperties defaultRequestProperties;
+    @Nullable
+    private final String userAgent;
+    @Nullable
+    private final RequestProperties defaultRequestProperties;
     private final RequestProperties requestProperties;
     private final boolean keepPostFor302Redirects;
 
-    @Nullable private Predicate<String> contentTypePredicate;
-    @Nullable private DataSpec dataSpec;
-    @Nullable private HttpURLConnection connection;
-    @Nullable private InputStream inputStream;
+    @Nullable
+    private Predicate<String> contentTypePredicate;
+    @Nullable
+    private DataSpec dataSpec;
+    @Nullable
+    private HttpURLConnection connection;
+    @Nullable
+    private InputStream inputStream;
     private boolean opened;
     private int responseCode;
     private long bytesToRead;
     private long bytesRead;
+    private Uri noConnUri = null;
+    private int noConnResponseCode = -1;
 
     /**
      * @deprecated Use {@link AnimeDataSource.Factory} instead.
@@ -285,7 +151,6 @@ import javax.net.ssl.HttpsURLConnection;
                 /* contentTypePredicate= */ null,
                 /* keepPostFor302Redirects= */ false);
     }
-
     private AnimeDataSource(
             @Nullable String userAgent,
             int connectTimeoutMillis,
@@ -305,12 +170,60 @@ import javax.net.ssl.HttpsURLConnection;
         this.keepPostFor302Redirects = keepPostFor302Redirects;
     }
 
-    private Uri noConnUri=null;
-    private int noConnResponseCode=-1;
+    /**
+     * On platform API levels 19 and 20, okhttp's implementation of {@link InputStream#close} can
+     * block for a long time if the stream has a lot of data remaining. Call this method before
+     * closing the input stream to make a best effort to cause the input stream to encounter an
+     * unexpected end of input, working around this issue. On other platform API levels, the method
+     * does nothing.
+     *
+     * @param connection     The connection whose {@link InputStream} should be terminated.
+     * @param bytesRemaining The number of bytes remaining to be read from the input stream if its
+     *                       length is known. {@link C#LENGTH_UNSET} otherwise.
+     */
+    private static void maybeTerminateInputStream(
+            @Nullable HttpURLConnection connection, long bytesRemaining) {
+        if (connection == null || Util.SDK_INT < 19 || Util.SDK_INT > 20) {
+            return;
+        }
+
+        try {
+            InputStream inputStream = connection.getInputStream();
+            if (bytesRemaining == C.LENGTH_UNSET) {
+                // If the input stream has already ended, do nothing. The socket may be re-used.
+                if (inputStream.read() == -1) {
+                    return;
+                }
+            } else if (bytesRemaining <= MAX_BYTES_TO_DRAIN) {
+                // There isn't much data left. Prefer to allow it to drain, which may allow the socket to be
+                // re-used.
+                return;
+            }
+            String className = inputStream.getClass().getName();
+            if ("com.android.okhttp.internal.http.HttpTransport$ChunkedInputStream".equals(className)
+                    || "com.android.okhttp.internal.http.HttpTransport$FixedLengthInputStream"
+                    .equals(className)) {
+                Class<?> superclass = inputStream.getClass().getSuperclass();
+                Method unexpectedEndOfInput =
+                        checkNotNull(superclass).getDeclaredMethod("unexpectedEndOfInput");
+                unexpectedEndOfInput.setAccessible(true);
+                unexpectedEndOfInput.invoke(inputStream);
+            }
+        } catch (Exception e) {
+            // If an IOException then the connection didn't ever have an input stream, or it was closed
+            // already. If another type of exception then something went wrong, most likely the device
+            // isn't using okhttp.
+        }
+    }
+
+    private static boolean isCompressed(HttpURLConnection connection) {
+        String contentEncoding = connection.getHeaderField("Content-Encoding");
+        return "gzip".equalsIgnoreCase(contentEncoding);
+    }
 
     /**
      * @deprecated Use {@link AnimeDataSource.Factory#setContentTypePredicate(Predicate)}
-     *     instead.
+     * instead.
      */
     @UnstableApi
     @Deprecated
@@ -328,7 +241,7 @@ import javax.net.ssl.HttpsURLConnection;
     @UnstableApi
     @Override
     public int getResponseCode() {
-        if (noConnResponseCode>0){
+        if (noConnResponseCode > 0) {
             return noConnResponseCode;
         }
         return connection == null || responseCode <= 0 ? -1 : responseCode;
@@ -372,39 +285,41 @@ import javax.net.ssl.HttpsURLConnection;
         requestProperties.clear();
     }
 
-    /** Opens the source to read the specified data. */
+    /**
+     * Opens the source to read the specified data.
+     */
     @UnstableApi
     @Override
     public long open(DataSpec dataSpec) throws HttpDataSourceException {
         this.dataSpec = dataSpec;
         bytesRead = 0;
         bytesToRead = 0;
-        noConnUri=null;
-        noConnResponseCode=-1;
+        noConnUri = null;
+        noConnResponseCode = -1;
 
         transferInitializing(dataSpec);
 
-        if (Conf.SOURCE_DOMAIN==6) {
+        if (Conf.SOURCE_DOMAIN == 6) {
             try {
                 URL url = new URL(dataSpec.uri.toString());
-                if (url.getRef()!=null && url.getRef().startsWith("DAT=")){
-                    String b64=url.getRef().substring(4);
-                    if (b64.indexOf("#")>0){
-                        b64=b64.substring(0,b64.indexOf("#"));
+                if (url.getRef() != null && url.getRef().startsWith("DAT=")) {
+                    String b64 = url.getRef().substring(4);
+                    if (b64.indexOf("#") > 0) {
+                        b64 = b64.substring(0, b64.indexOf("#"));
                     }
-                    byte[] txtVal = Base64.decode(b64,Base64.DEFAULT);
+                    byte[] txtVal = Base64.decode(b64, Base64.DEFAULT);
                     inputStream = new ByteArrayInputStream(txtVal);
                     bytesToRead = dataSpec.length; // txtVal.length;
                     opened = false;
-                    this.connection=null;
-                    noConnUri=Uri.parse(url.toString());
-                    noConnResponseCode=200;
-                    Log.d("ATVLOG","Source6 Direct M3u8: ("+bytesToRead+")\n"+
-                        new String(txtVal, StandardCharsets.UTF_8));
+                    this.connection = null;
+                    noConnUri = Uri.parse(url.toString());
+                    noConnResponseCode = 200;
+                    Log.d("ATVLOG", "Source6 Direct M3u8: (" + bytesToRead + ")\n" +
+                            new String(txtVal, StandardCharsets.UTF_8));
                     return bytesToRead;
                 }
             } catch (Exception e) {
-                Log.d("ATVLOG","Source6 Direct M3u8 ERR: "+e);
+                Log.d("ATVLOG", "Source6 Direct M3u8 ERR: " + e);
             }
         }
 
@@ -423,7 +338,7 @@ import javax.net.ssl.HttpsURLConnection;
 //        Log.d("VIDEOSOURCE", "Response Code: "+responseCode+" - "+responseMessage);
 
         // Check for a valid response code.
-        if (responseCode < 200 || responseCode > 299){
+        if (responseCode < 200 || responseCode > 299) {
 
             Map<String, List<String>> headers = connection.getHeaderFields();
             if (responseCode == 416) {
@@ -563,15 +478,17 @@ import javax.net.ssl.HttpsURLConnection;
         }
     }
 
-    /** Establishes a connection, following redirects to do so where permitted. */
+    /**
+     * Establishes a connection, following redirects to do so where permitted.
+     */
     private HttpURLConnection makeConnection(DataSpec dataSpec) throws IOException {
         URL url = new URL(dataSpec.uri.toString());
 
-        if (Conf.SOURCE_DOMAIN==5) {
+        if (Conf.SOURCE_DOMAIN == 5) {
             // source 5 gogocden hack
-            if (url.getHost().contains("gogocden.site") && (url.getQuery()==null) && sd5query.contains("?")){
-                String addurl=sd5query.substring(sd5query.indexOf("?"));
-                url = new URL(dataSpec.uri.toString()+addurl);
+            if (url.getHost().contains("gogocden.site") && (url.getQuery() == null) && sd5query.contains("?")) {
+                String addurl = sd5query.substring(sd5query.indexOf("?"));
+                url = new URL(dataSpec.uri.toString() + addurl);
             }
         }
 //        Log.d("VIDEOSOURCE", "REQ-URL: "+url);
@@ -648,18 +565,16 @@ import javax.net.ssl.HttpsURLConnection;
                 HttpDataSourceException.TYPE_OPEN);
     }
 
-    public static String sd5query="";
-
     /**
      * Configures a connection and opens it.
      *
-     * @param url The url to connect to.
-     * @param httpMethod The http method.
-     * @param httpBody The body data, or {@code null} if not required.
-     * @param position The byte offset of the requested data.
-     * @param length The length of the requested data, or {@link C#LENGTH_UNSET}.
-     * @param allowGzip Whether to allow the use of gzip.
-     * @param followRedirects Whether to follow redirects.
+     * @param url               The url to connect to.
+     * @param httpMethod        The http method.
+     * @param httpBody          The body data, or {@code null} if not required.
+     * @param position          The byte offset of the requested data.
+     * @param length            The length of the requested data, or {@link C#LENGTH_UNSET}.
+     * @param allowGzip         Whether to allow the use of gzip.
+     * @param followRedirects   Whether to follow redirects.
      * @param requestParameters parameters (HTTP headers) to include in request.
      */
     private HttpURLConnection makeConnection(
@@ -675,7 +590,7 @@ import javax.net.ssl.HttpsURLConnection;
         HttpURLConnection connection = openConnection(url);
 
         if (url.getHost().contains("mp4upload.com")) {
-            Log.d("ATVLOG","mp4upload allow cert");
+            Log.d("ATVLOG", "mp4upload allow cert");
             if (connection instanceof HttpsURLConnection) {
                 HttpsURLConnection httpsConn = (HttpsURLConnection) connection;
                 httpsConn.setSSLSocketFactory(SSLCertificateSocketFactory.getInsecure(0, null));
@@ -720,7 +635,9 @@ import javax.net.ssl.HttpsURLConnection;
         return connection;
     }
 
-    /** Creates an {@link HttpURLConnection} that is connected with the {@code url}. */
+    /**
+     * Creates an {@link HttpURLConnection} that is connected with the {@code url}.
+     */
     @VisibleForTesting
     /* package */ HttpURLConnection openConnection(URL url) throws IOException {
         return (HttpURLConnection) url.openConnection();
@@ -730,8 +647,8 @@ import javax.net.ssl.HttpsURLConnection;
      * Handles a redirect.
      *
      * @param originalUrl The original URL.
-     * @param location The Location header in the response. May be {@code null}.
-     * @param dataSpec The {@link DataSpec}.
+     * @param location    The Location header in the response. May be {@code null}.
+     * @param dataSpec    The {@link DataSpec}.
      * @return The next URL.
      * @throws HttpDataSourceException If redirection isn't possible.
      */
@@ -783,9 +700,9 @@ import javax.net.ssl.HttpsURLConnection;
      * Attempts to skip the specified number of bytes in full.
      *
      * @param bytesToSkip The number of bytes to skip.
-     * @param dataSpec The {@link DataSpec}.
+     * @param dataSpec    The {@link DataSpec}.
      * @throws IOException If the thread is interrupted during the operation, or if the data ended
-     *     before skipping the specified number of bytes.
+     *                     before skipping the specified number of bytes.
      */
     private void skipFully(long bytesToSkip, DataSpec dataSpec) throws IOException {
         if (bytesToSkip == 0) {
@@ -822,11 +739,11 @@ import javax.net.ssl.HttpsURLConnection;
      * <p>This method blocks until at least one byte of data can be read, the end of the opened range
      * is detected, or an exception is thrown.
      *
-     * @param buffer The buffer into which the read data should be stored.
-     * @param offset The start offset into {@code buffer} at which data should be written.
+     * @param buffer     The buffer into which the read data should be stored.
+     * @param offset     The start offset into {@code buffer} at which data should be written.
      * @param readLength The maximum number of bytes to read.
      * @return The number of bytes read, or {@link C#RESULT_END_OF_INPUT} if the end of the opened
-     *     range is reached.
+     * range is reached.
      * @throws IOException If an error occurs reading from the source.
      */
     private int readInternal(byte[] buffer, int offset, int readLength) throws IOException {
@@ -854,52 +771,8 @@ import javax.net.ssl.HttpsURLConnection;
     }
 
     /**
-     * On platform API levels 19 and 20, okhttp's implementation of {@link InputStream#close} can
-     * block for a long time if the stream has a lot of data remaining. Call this method before
-     * closing the input stream to make a best effort to cause the input stream to encounter an
-     * unexpected end of input, working around this issue. On other platform API levels, the method
-     * does nothing.
-     *
-     * @param connection The connection whose {@link InputStream} should be terminated.
-     * @param bytesRemaining The number of bytes remaining to be read from the input stream if its
-     *     length is known. {@link C#LENGTH_UNSET} otherwise.
+     * Closes the current connection quietly, if there is one.
      */
-    private static void maybeTerminateInputStream(
-            @Nullable HttpURLConnection connection, long bytesRemaining) {
-        if (connection == null || Util.SDK_INT < 19 || Util.SDK_INT > 20) {
-            return;
-        }
-
-        try {
-            InputStream inputStream = connection.getInputStream();
-            if (bytesRemaining == C.LENGTH_UNSET) {
-                // If the input stream has already ended, do nothing. The socket may be re-used.
-                if (inputStream.read() == -1) {
-                    return;
-                }
-            } else if (bytesRemaining <= MAX_BYTES_TO_DRAIN) {
-                // There isn't much data left. Prefer to allow it to drain, which may allow the socket to be
-                // re-used.
-                return;
-            }
-            String className = inputStream.getClass().getName();
-            if ("com.android.okhttp.internal.http.HttpTransport$ChunkedInputStream".equals(className)
-                    || "com.android.okhttp.internal.http.HttpTransport$FixedLengthInputStream"
-                    .equals(className)) {
-                Class<?> superclass = inputStream.getClass().getSuperclass();
-                Method unexpectedEndOfInput =
-                        checkNotNull(superclass).getDeclaredMethod("unexpectedEndOfInput");
-                unexpectedEndOfInput.setAccessible(true);
-                unexpectedEndOfInput.invoke(inputStream);
-            }
-        } catch (Exception e) {
-            // If an IOException then the connection didn't ever have an input stream, or it was closed
-            // already. If another type of exception then something went wrong, most likely the device
-            // isn't using okhttp.
-        }
-    }
-
-    /** Closes the current connection quietly, if there is one. */
     private void closeConnectionQuietly() {
         if (connection != null) {
             try {
@@ -911,9 +784,158 @@ import javax.net.ssl.HttpsURLConnection;
         }
     }
 
-    private static boolean isCompressed(HttpURLConnection connection) {
-        String contentEncoding = connection.getHeaderField("Content-Encoding");
-        return "gzip".equalsIgnoreCase(contentEncoding);
+    /**
+     * {@link DataSource.Factory} for {@link AnimeDataSource} instances.
+     */
+    public static final class Factory implements HttpDataSource.Factory {
+
+        private final RequestProperties defaultRequestProperties;
+
+        @Nullable
+        private TransferListener transferListener;
+        @Nullable
+        private Predicate<String> contentTypePredicate;
+        @Nullable
+        private String userAgent;
+        private int connectTimeoutMs;
+        private int readTimeoutMs;
+        private boolean allowCrossProtocolRedirects;
+        private boolean keepPostFor302Redirects;
+
+        /**
+         * Creates an instance.
+         */
+        public Factory() {
+            defaultRequestProperties = new RequestProperties();
+            connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MILLIS;
+            readTimeoutMs = DEFAULT_READ_TIMEOUT_MILLIS;
+        }
+
+        @UnstableApi
+        @Override
+        public final AnimeDataSource.Factory setDefaultRequestProperties(Map<String, String> defaultRequestProperties) {
+            this.defaultRequestProperties.clearAndSet(defaultRequestProperties);
+            return this;
+        }
+
+        /**
+         * Sets the user agent that will be used.
+         *
+         * <p>The default is {@code null}, which causes the default user agent of the underlying
+         * platform to be used.
+         *
+         * @param userAgent The user agent that will be used, or {@code null} to use the default user
+         *                  agent of the underlying platform.
+         * @return This factory.
+         */
+        @UnstableApi
+        public AnimeDataSource.Factory setUserAgent(@Nullable String userAgent) {
+            this.userAgent = userAgent;
+            return this;
+        }
+
+        /**
+         * Sets the connect timeout, in milliseconds.
+         *
+         * <p>The default is {@link AnimeDataSource#DEFAULT_CONNECT_TIMEOUT_MILLIS}.
+         *
+         * @param connectTimeoutMs The connect timeout, in milliseconds, that will be used.
+         * @return This factory.
+         */
+        @UnstableApi
+        public AnimeDataSource.Factory setConnectTimeoutMs(int connectTimeoutMs) {
+            this.connectTimeoutMs = connectTimeoutMs;
+            return this;
+        }
+
+        /**
+         * Sets the read timeout, in milliseconds.
+         *
+         * <p>The default is {@link AnimeDataSource#DEFAULT_READ_TIMEOUT_MILLIS}.
+         *
+         * @param readTimeoutMs The connect timeout, in milliseconds, that will be used.
+         * @return This factory.
+         */
+        @UnstableApi
+        public AnimeDataSource.Factory setReadTimeoutMs(int readTimeoutMs) {
+            this.readTimeoutMs = readTimeoutMs;
+            return this;
+        }
+
+        /**
+         * Sets whether to allow cross protocol redirects.
+         *
+         * <p>The default is {@code false}.
+         *
+         * @param allowCrossProtocolRedirects Whether to allow cross protocol redirects.
+         * @return This factory.
+         */
+        @UnstableApi
+        public AnimeDataSource.Factory setAllowCrossProtocolRedirects(boolean allowCrossProtocolRedirects) {
+            this.allowCrossProtocolRedirects = allowCrossProtocolRedirects;
+            return this;
+        }
+
+        /**
+         * Sets a content type {@link Predicate}. If a content type is rejected by the predicate then a
+         * {@link HttpDataSource.InvalidContentTypeException} is thrown from {@link
+         * AnimeDataSource#open(DataSpec)}.
+         *
+         * <p>The default is {@code null}.
+         *
+         * @param contentTypePredicate The content type {@link Predicate}, or {@code null} to clear a
+         *                             predicate that was previously set.
+         * @return This factory.
+         */
+        @UnstableApi
+        public AnimeDataSource.Factory setContentTypePredicate(@Nullable Predicate<String> contentTypePredicate) {
+            this.contentTypePredicate = contentTypePredicate;
+            return this;
+        }
+
+        /**
+         * Sets the {@link TransferListener} that will be used.
+         *
+         * <p>The default is {@code null}.
+         *
+         * <p>See {@link DataSource#addTransferListener(TransferListener)}.
+         *
+         * @param transferListener The listener that will be used.
+         * @return This factory.
+         */
+        @UnstableApi
+        public AnimeDataSource.Factory setTransferListener(@Nullable TransferListener transferListener) {
+            this.transferListener = transferListener;
+            return this;
+        }
+
+        /**
+         * Sets whether we should keep the POST method and body when we have HTTP 302 redirects for a
+         * POST request.
+         */
+        @UnstableApi
+        public AnimeDataSource.Factory setKeepPostFor302Redirects(boolean keepPostFor302Redirects) {
+            this.keepPostFor302Redirects = keepPostFor302Redirects;
+            return this;
+        }
+
+        @UnstableApi
+        @Override
+        public AnimeDataSource createDataSource() {
+            AnimeDataSource dataSource =
+                    new AnimeDataSource(
+                            userAgent,
+                            connectTimeoutMs,
+                            readTimeoutMs,
+                            allowCrossProtocolRedirects,
+                            defaultRequestProperties,
+                            contentTypePredicate,
+                            keepPostFor302Redirects);
+            if (transferListener != null) {
+                dataSource.addTransferListener(transferListener);
+            }
+            return dataSource;
+        }
     }
 
     private static class NullFilteringHeadersMap extends ForwardingMap<String, List<String>> {

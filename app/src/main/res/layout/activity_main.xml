@@ -4,24 +4,25 @@
     android:id="@+id/main_browse_fragment"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:fitsSystemWindows="false"
     tools:context=".MainActivity"
     tools:deviceIds="tv"
-    android:fitsSystemWindows="false"
     tools:ignore="MergeRootFrame">
+
     <ImageView
+        android:id="@+id/splash"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="centerInside"
-        android:id="@+id/splash"
         android:src="@drawable/ic_splash"
         tools:ignore="ContentDescription" />
+
     <FrameLayout
-        android:background="#ff000000"
         android:id="@+id/video_layout"
-        android:visibility="invisible"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-    </FrameLayout>
+        android:layout_height="match_parent"
+        android:background="#ff000000"
+        android:visibility="invisible"></FrameLayout>
     <!-- WebView
         android:visibility="invisible"
         android:layout_width="500dp"
@@ -31,11 +32,10 @@
         android:alpha="0.0001"
         / -->
     <WebView
-        android:visibility="invisible"
+        android:id="@+id/webview"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:id="@+id/webview"
-        />
+        android:visibility="invisible" />
     <!-- LinearLayout
         android:visibility="invisible"
         android:id="@+id/cfprogress"

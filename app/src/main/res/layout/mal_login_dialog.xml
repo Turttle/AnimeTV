@@ -5,26 +5,28 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="16dp">
+
     <EditText
         android:id="@+id/user"
+        style="@style/Widget.AppCompat.EditText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Username"
-        android:singleLine="true"
         android:imeOptions="actionNext"
-        android:inputType="textVisiblePassword|textNoSuggestions"
-        style="@style/Widget.AppCompat.EditText"
         android:importantForAutofill="no"
+        android:inputType="textVisiblePassword|textNoSuggestions"
+        android:singleLine="true"
         tools:ignore="HardcodedText" />
+
     <EditText
         android:id="@+id/password"
+        style="@style/Widget.AppCompat.EditText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="Password"
-        android:singleLine="true"
         android:imeOptions="actionDone"
-        android:inputType="textPassword"
-        style="@style/Widget.AppCompat.EditText"
         android:importantForAutofill="no"
+        android:inputType="textPassword"
+        android:singleLine="true"
         tools:ignore="HardcodedText" />
 </LinearLayout>

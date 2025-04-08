@@ -31,19 +31,15 @@ import androidx.tvprovider.media.tv.WatchNextProgram;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
-import java.util.List;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-
+import java.util.List;
 
 
 public class AnimeProvider {
-    private static final String _TAG="ATVLOG-CHANNEL";
+    private static final String _TAG = "ATVLOG-CHANNEL";
 
     private static final String[] CHANNELS_PROJECTION = {
             TvContractCompat.Channels._ID,
@@ -61,38 +57,71 @@ public class AnimeProvider {
             TvContract.WatchNextPrograms.COLUMN_INTENT_URI,
             TvContract.WatchNextPrograms.COLUMN_TITLE
     };
-    public interface RecentCallback {
-        void onFinish(String result);
-    }
+    private static String ANILIST_GRAPHQL = "{\"query\":\"query ($tm: Int, " +
+            "$page: Int, $perPage: Int){ Page(page: $page, perPage: $perPage) { " +
+            "pageInfo { perPage hasNextPage currentPage } airingSchedules" +
+            "(airingAt_lesser:$tm,sort:TIME_DESC){ airingAt episode " +
+            "timeUntilAiring media{ id isAdult " +
+            "title{ romaji english } coverImage{ extraLarge " +
+            "} episodes format popularity averageScore } } } }\",\"variables\":{\"tm\":0xFFFFFF," +
+            "\"page\":1,\"perPage\":50}}";
+    private static String POPULAR_ANIME_GRAPHQL = "{\"query\":\"query ($page: Int, $perPage: Int){ " +
+            "Page(page: $page, perPage: $perPage) { " +
+            "pageInfo { perPage hasNextPage currentPage } " +
+            "media(sort:POPULARITY_DESC,isAdult:false, type: ANIME, status_not_in:[HIATUS,CANCELLED,NOT_YET_RELEASED]) { " +
+            "id title{ romaji english } " +
+            "coverImage{ large } " +
+            "episodes format averageScore " +
+            "} } }\",\"variables\":{\"page\":1,\"perPage\":50}}";
+    private static String TRENDING_ANIME_GRAPHQL = "{\"query\":\"query " +
+            "($page: Int, $perPage: Int){ " +
+            "Page(page: $page, perPage: $perPage) { " +
+            "pageInfo { perPage hasNextPage currentPage } " +
+            "media(sort:TRENDING_DESC,isAdult:false, type: ANIME, status:RELEASING) {" +
+            "id title{ romaji english } " +
+            "coverImage{ large } " +
+            "episodes format averageScore " +
+            "} } }\",\"variables\":{\"page\":1,\"perPage\":50}}";
     private final Context ctx;
     private long CHANNEL_ID;
 
-    public static void executeJob(Context c){
+    public AnimeProvider(Context c, String channelName, String internalProviderId, int logoResourceId) {
+        ctx = c;
+        AnimeApi.initHttpEngine(c);
+        try {
+            CHANNEL_ID = initChannel(channelName, internalProviderId, logoResourceId);
+        } catch (Exception ex) {
+            CHANNEL_ID = -1;
+            Log.d(_TAG, ex.toString());
+        }
+    }
+
+    public static void executeJob(Context c) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // Recently Updated Anime
             AnimeProvider recentProvider = new AnimeProvider(
-                c,
-                "Recent",
-                "AnimeTV",
-                R.drawable.splash
+                    c,
+                    "Recent",
+                    "AnimeTV",
+                    R.drawable.splash
             );
             recentProvider.startLoadRecent();
 
             // Trending Anime
             AnimeProvider trendingProvider = new AnimeProvider(
-                c,
-                "Trending",
-                "AnimeTV_Trending",
-                R.drawable.splash
+                    c,
+                    "Trending",
+                    "AnimeTV_Trending",
+                    R.drawable.splash
             );
             trendingProvider.startLoadAnilist(TRENDING_ANIME_GRAPHQL);
 
             // Popular Anime
             AnimeProvider popularProvider = new AnimeProvider(
-                c,
-                "Popular",
-                "AnimeTV_Popular",
-                R.drawable.splash
+                    c,
+                    "Popular",
+                    "AnimeTV_Popular",
+                    R.drawable.splash
             );
             popularProvider.startLoadAnilist(POPULAR_ANIME_GRAPHQL);
 
@@ -101,17 +130,97 @@ public class AnimeProvider {
     }
 
     public static void scheduleJob(Context context) {
-        Log.d(_TAG,"SCHEDULING JOB");
+        Log.d(_TAG, "SCHEDULING JOB");
         ComponentName serviceComponent = new ComponentName(context, ChannelService.class);
         JobInfo.Builder builder = new JobInfo.Builder(0, serviceComponent);
         builder.setMinimumLatency(3600 * 1000); // Wait at least 30s
         builder.setOverrideDeadline(3800 * 1000); // Maximum delay 60s
-        JobScheduler jobScheduler = (JobScheduler)context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        JobScheduler jobScheduler = (JobScheduler) context.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         jobScheduler.schedule(builder.build());
     }
 
-    public void startLoadRecent(){
-        if (CHANNEL_ID<1) return;
+    /* Drawable to bitmap */
+    @NonNull
+    public static Bitmap convertToBitmap(Context context, int resourceId) {
+        Drawable drawable = context.getDrawable(resourceId);
+        if (drawable instanceof VectorDrawable) {
+            Bitmap bitmap =
+                    Bitmap.createBitmap(
+                            drawable.getIntrinsicWidth(),
+                            drawable.getIntrinsicHeight(),
+                            Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+            drawable.draw(canvas);
+            return bitmap;
+        }
+
+        return BitmapFactory.decodeResource(context.getResources(), resourceId);
+    }
+
+    @SuppressLint("RestrictedApi")
+    public static void clearPlayNext(Context c) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            /* Clear Watch Next */
+            try {
+                Cursor cursor =
+                        c.getContentResolver()
+                                .query(
+                                        TvContractCompat.WatchNextPrograms.CONTENT_URI,
+                                        PLAYNEXT_PROJECTION,
+                                        null,
+                                        null,
+                                        null);
+                if (cursor != null && cursor.moveToFirst()) {
+                    do {
+                        WatchNextProgram wn = WatchNextProgram.fromCursor(cursor);
+                        c.getContentResolver()
+                                .delete(
+                                        TvContractCompat.buildWatchNextProgramUri(wn.getId()),
+                                        null,
+                                        null);
+                    } while (cursor.moveToNext());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    @SuppressLint("RestrictedApi")
+    public static void setPlayNext(
+            Context c, String title, String desc,
+            String poster, String uri, String tip,
+            int pos, int duration, int sd) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                clearPlayNext(c);
+                @SuppressLint("UnsafeOptInUsageError") Intent myIntent = new Intent(c, MainActivity.class);
+                myIntent.setPackage(c.getPackageName());
+                myIntent.putExtra("viewurl", uri);
+                myIntent.putExtra("viewtip", tip);
+                myIntent.putExtra("viewsd", sd + "");
+                myIntent.putExtra("viewpos", pos + "");
+                Uri intentUri = Uri.parse(myIntent.toUri(Intent.URI_ANDROID_APP_SCHEME));
+                WatchNextProgram.Builder builder = new WatchNextProgram.Builder();
+                builder.setType(TvContractCompat.WatchNextPrograms.TYPE_MOVIE)
+                        .setWatchNextType(TvContractCompat.WatchNextPrograms.WATCH_NEXT_TYPE_CONTINUE)
+                        .setDurationMillis(duration * 1000)
+                        .setLastPlaybackPositionMillis(pos * 1000)
+                        .setLastEngagementTimeUtcMillis(Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis())
+                        .setTitle(title)
+                        .setDescription(desc)
+                        .setPosterArtUri(Uri.parse(poster))
+                        .setIntentUri(intentUri);
+                Uri watchNextProgramUri = c.getContentResolver()
+                        .insert(TvContractCompat.WatchNextPrograms.CONTENT_URI, builder.build().toContentValues());
+                Log.d(_TAG, "New Watch Next Update = " + watchNextProgramUri);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    public void startLoadRecent() {
+        if (CHANNEL_ID < 1) return;
         try {
             loadRecent(result -> {
                 try {
@@ -136,29 +245,19 @@ public class AnimeProvider {
                 }
                 Log.d(_TAG, "RES = " + result);
             });
-        }catch (Exception ignored){}
-    }
-
-    public AnimeProvider(Context c, String channelName, String internalProviderId, int logoResourceId) {
-        ctx = c;
-        AnimeApi.initHttpEngine(c);
-        try {
-            CHANNEL_ID = initChannel(channelName, internalProviderId, logoResourceId);
-        } catch (Exception ex) {
-            CHANNEL_ID = -1;
-            Log.d(_TAG, ex.toString());
+        } catch (Exception ignored) {
         }
     }
 
-    public void loadRecent(RecentCallback cb){
-        AsyncTask.execute(() ->loadRecentExec(cb));
+    public void loadRecent(RecentCallback cb) {
+        AsyncTask.execute(() -> loadRecentExec(cb));
     }
 
     private void parseRecent(JSONArray r, String buf) throws JSONException {
         JSONObject jo = new JSONObject(buf);
         JSONArray rs = jo.getJSONObject("data")
-                        .getJSONObject("Page")
-                        .getJSONArray("airingSchedules");
+                .getJSONObject("Page")
+                .getJSONArray("airingSchedules");
 
         List<JSONObject> animeList = new ArrayList<>();
 
@@ -166,7 +265,7 @@ public class AnimeProvider {
             try {
                 JSONObject airingSchedule = rs.getJSONObject(i);
                 JSONObject med = airingSchedule.getJSONObject("media");
-                if (med.getBoolean("isAdult")){
+                if (med.getBoolean("isAdult")) {
                     continue;
                 }
                 JSONObject medT = med.getJSONObject("title");
@@ -187,9 +286,9 @@ public class AnimeProvider {
                 d.put("title", en.isEmpty() ? jp : en);
                 d.put("poster", img);
                 if (format.equals("MOVIE") || ep == 0) {
-                d.put("ep", "Score: " + score + "  |  " + format);
+                    d.put("ep", "Score: " + score + "  |  " + format);
                 } else {
-                d.put("ep", ep + " " + " Episodes  |  Score: " + score + "  |  " + format);
+                    d.put("ep", ep + " " + " Episodes  |  Score: " + score + "  |  " + format);
                 }
                 d.put("type", format);
                 d.put("tip", id);
@@ -216,59 +315,32 @@ public class AnimeProvider {
         }
     }
 
-    private static String ANILIST_GRAPHQL ="{\"query\":\"query ($tm: Int, " +
-        "$page: Int, $perPage: Int){ Page(page: $page, perPage: $perPage) { " +
-        "pageInfo { perPage hasNextPage currentPage } airingSchedules" +
-        "(airingAt_lesser:$tm,sort:TIME_DESC){ airingAt episode " +
-        "timeUntilAiring media{ id isAdult "+
-        "title{ romaji english } coverImage{ extraLarge " +
-        "} episodes format popularity averageScore } } } }\",\"variables\":{\"tm\":0xFFFFFF," +
-        "\"page\":1,\"perPage\":50}}";
-
     /* Get latest updated sub */
-    private void loadRecentExec(RecentCallback cb){
+    private void loadRecentExec(RecentCallback cb) {
         try {
-            AnimeApi.Http http=new AnimeApi.Http("https://graphql.anilist.co/");
-            http.addHeader("Accept","application/json");
+            AnimeApi.Http http = new AnimeApi.Http("https://graphql.anilist.co/");
+            http.addHeader("Accept", "application/json");
 
             long unixTime = System.currentTimeMillis() / 1000L;
             String postData = ANILIST_GRAPHQL.replace(
-                "0xFFFFFF",unixTime+"");
-            http.setMethod("POST",postData,"application/json");
+                    "0xFFFFFF", unixTime + "");
+            http.setMethod("POST", postData, "application/json");
             http.execute();
 
-            JSONArray r=new JSONArray("[]");
-            parseRecent(r,http.body.toString());
+            JSONArray r = new JSONArray("[]");
+            parseRecent(r, http.body.toString());
 
             cb.onFinish(r.toString());
 
-            if (r.length()>0) {
-                Log.d(_TAG,"GOT RECENTS => "+r.length());
+            if (r.length() > 0) {
+                Log.d(_TAG, "GOT RECENTS => " + r.length());
                 cb.onFinish(r.toString());
                 return;
             }
-        }catch(Exception ignored){}
+        } catch (Exception ignored) {
+        }
         cb.onFinish("");
     }
-
-    private static String POPULAR_ANIME_GRAPHQL = "{\"query\":\"query ($page: Int, $perPage: Int){ " +
-        "Page(page: $page, perPage: $perPage) { " +
-        "pageInfo { perPage hasNextPage currentPage } " +
-        "media(sort:POPULARITY_DESC,isAdult:false, type: ANIME, status_not_in:[HIATUS,CANCELLED,NOT_YET_RELEASED]) { " +
-        "id title{ romaji english } " +
-        "coverImage{ large } " +
-        "episodes format averageScore " +
-        "} } }\",\"variables\":{\"page\":1,\"perPage\":50}}";
-
-    private static String TRENDING_ANIME_GRAPHQL = "{\"query\":\"query " +
-        "($page: Int, $perPage: Int){ " +
-        "Page(page: $page, perPage: $perPage) { " +
-        "pageInfo { perPage hasNextPage currentPage } " +
-        "media(sort:TRENDING_DESC,isAdult:false, type: ANIME, status:RELEASING) {" +
-        "id title{ romaji english } " +
-        "coverImage{ large } " +
-        "episodes format averageScore " +
-        "} } }\",\"variables\":{\"page\":1,\"perPage\":50}}";
 
     public void startLoadAnilist(String graphQl) {
         if (CHANNEL_ID < 1) return;
@@ -296,7 +368,8 @@ public class AnimeProvider {
                 }
                 Log.d(_TAG, "Popular Anime RES = " + result);
             });
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     public void loadAnilist(String graphQl, RecentCallback cb) {
@@ -321,15 +394,16 @@ public class AnimeProvider {
                 cb.onFinish(r.toString());
                 return;
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         cb.onFinish("");
     }
 
     private void parsePopular(JSONArray r, String buf) throws JSONException {
         JSONObject jo = new JSONObject(buf);
         JSONArray rs = jo.getJSONObject("data")
-                        .getJSONObject("Page")
-                        .getJSONArray("media");
+                .getJSONObject("Page")
+                .getJSONArray("media");
 
         List<JSONObject> animeList = new ArrayList<>();
 
@@ -351,9 +425,9 @@ public class AnimeProvider {
                 d.put("title", en.isEmpty() ? jp : en);
                 d.put("poster", img);
                 if (format.equals("MOVIE") || ep == 0) {
-                d.put("ep", "Score: " + score + "  |  " + format);
+                    d.put("ep", "Score: " + score + "  |  " + format);
                 } else {
-                d.put("ep", ep + " " + " Episodes  |  Score: " + score + "  |  " + format);
+                    d.put("ep", ep + " " + " Episodes  |  Score: " + score + "  |  " + format);
                 }
                 d.put("type", format);
                 d.put("tip", id);
@@ -365,25 +439,6 @@ public class AnimeProvider {
         for (JSONObject anime : animeList) {
             r.put(anime);
         }
-    }
-
-    /* Drawable to bitmap */
-    @NonNull
-    public static Bitmap convertToBitmap(Context context, int resourceId) {
-        Drawable drawable = context.getDrawable(resourceId);
-        if (drawable instanceof VectorDrawable) {
-            Bitmap bitmap =
-                    Bitmap.createBitmap(
-                            drawable.getIntrinsicWidth(),
-                            drawable.getIntrinsicHeight(),
-                            Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-            drawable.draw(canvas);
-            return bitmap;
-        }
-
-        return BitmapFactory.decodeResource(context.getResources(), resourceId);
     }
 
     /* Create Channel */
@@ -420,16 +475,16 @@ public class AnimeProvider {
         try {
             Uri channelUri = TvContractCompat.Channels.CONTENT_URI;
             String[] projection = {
-                TvContractCompat.Channels._ID,
-                TvContractCompat.Channels.COLUMN_INTERNAL_PROVIDER_ID
+                    TvContractCompat.Channels._ID,
+                    TvContractCompat.Channels.COLUMN_INTERNAL_PROVIDER_ID
             };
 
             Cursor cursor = ctx.getContentResolver().query(
-                channelUri,
-                projection,
-                null,
-                null,
-                null
+                    channelUri,
+                    projection,
+                    null,
+                    null,
+                    null
             );
 
             if (cursor != null) {
@@ -464,10 +519,10 @@ public class AnimeProvider {
                                 null,
                                 null);
         if (cursor != null && cursor.moveToFirst()) {
-            int c=0;
+            int c = 0;
             do {
                 PreviewProgram prog = PreviewProgram.fromCursor(cursor);
-                if (prog.getChannelId()==CHANNEL_ID) {
+                if (prog.getChannelId() == CHANNEL_ID) {
                     ctx.getContentResolver()
                             .delete(
                                     TvContractCompat.buildPreviewProgramUri(prog.getId()),
@@ -476,7 +531,7 @@ public class AnimeProvider {
                     c++;
                 }
             } while (cursor.moveToNext());
-            Log.d(_TAG, "Cleanup " + c+" Programs");
+            Log.d(_TAG, "Cleanup " + c + " Programs");
         }
     }
 
@@ -489,7 +544,7 @@ public class AnimeProvider {
         myIntent.putExtra("viewtip", tip);
         myIntent.putExtra("viewsd", "1");
         myIntent.putExtra("viewpos", "0");
-        Uri intentUri= Uri.parse(myIntent.toUri(Intent.URI_ANDROID_APP_SCHEME));
+        Uri intentUri = Uri.parse(myIntent.toUri(Intent.URI_ANDROID_APP_SCHEME));
         builder.setChannelId(CHANNEL_ID)
                 .setType(TvContractCompat.PreviewProgramColumns.TYPE_TV_EPISODE)
                 .setTitle(title)
@@ -499,68 +554,11 @@ public class AnimeProvider {
                 .setIntentUri(intentUri);
         PreviewProgram previewProgram = builder.build();
         ctx.getContentResolver().insert(
-                                TvContractCompat.PreviewPrograms.CONTENT_URI,
-                                previewProgram.toContentValues());
+                TvContractCompat.PreviewPrograms.CONTENT_URI,
+                previewProgram.toContentValues());
     }
 
-    @SuppressLint("RestrictedApi")
-    public static void clearPlayNext(Context c) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            /* Clear Watch Next */
-            try {
-                Cursor cursor =
-                        c.getContentResolver()
-                                .query(
-                                        TvContractCompat.WatchNextPrograms.CONTENT_URI,
-                                        PLAYNEXT_PROJECTION,
-                                        null,
-                                        null,
-                                        null);
-                if (cursor != null && cursor.moveToFirst()) {
-                    do {
-                        WatchNextProgram wn = WatchNextProgram.fromCursor(cursor);
-                        c.getContentResolver()
-                                .delete(
-                                        TvContractCompat.buildWatchNextProgramUri(wn.getId()),
-                                        null,
-                                        null);
-                    } while (cursor.moveToNext());
-                }
-            } catch (Exception ignored) {
-            }
-        }
-    }
-
-    @SuppressLint("RestrictedApi")
-    public static void setPlayNext(
-            Context c,String title, String desc,
-            String poster, String uri, String tip,
-            int pos, int duration, int sd){
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            try {
-                clearPlayNext(c);
-                @SuppressLint("UnsafeOptInUsageError") Intent myIntent = new Intent(c, MainActivity.class);
-                myIntent.setPackage(c.getPackageName());
-                myIntent.putExtra("viewurl", uri);
-                myIntent.putExtra("viewtip", tip);
-                myIntent.putExtra("viewsd", sd+"");
-                myIntent.putExtra("viewpos", pos + "");
-                Uri intentUri = Uri.parse(myIntent.toUri(Intent.URI_ANDROID_APP_SCHEME));
-                WatchNextProgram.Builder builder = new WatchNextProgram.Builder();
-                builder.setType(TvContractCompat.WatchNextPrograms.TYPE_MOVIE)
-                        .setWatchNextType(TvContractCompat.WatchNextPrograms.WATCH_NEXT_TYPE_CONTINUE)
-                        .setDurationMillis(duration * 1000)
-                        .setLastPlaybackPositionMillis(pos * 1000)
-                        .setLastEngagementTimeUtcMillis(Calendar.getInstance(TimeZone.getTimeZone("UTC")).getTimeInMillis())
-                        .setTitle(title)
-                        .setDescription(desc)
-                        .setPosterArtUri(Uri.parse(poster))
-                        .setIntentUri(intentUri);
-                Uri watchNextProgramUri = c.getContentResolver()
-                        .insert(TvContractCompat.WatchNextPrograms.CONTENT_URI, builder.build().toContentValues());
-                Log.d(_TAG, "New Watch Next Update = " + watchNextProgramUri);
-            } catch (Exception ignored) {
-            }
-        }
+    public interface RecentCallback {
+        void onFinish(String result);
     }
 }
